@@ -2,6 +2,8 @@
 
 A nervous system, in a bubble universe, projecting into a world.
 
+Game: [Play World Projection](https://muse.ai/s/world-projection-game-mr6hxzxw8ayxx2/NsBG4ExZGzJ-dKn4k2TKOu02lwkRnWEH1DPp-e5RDP8)
+
 ## The projection, defined
 
 1. A probe is presented to the bubble's nervous system.
