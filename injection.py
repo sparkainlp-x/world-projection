@@ -139,6 +139,14 @@ class CrystallizeInjection:
                  cost=COST_PER_SAMPLE, alpha=ALPHA):
         if system.tau is None:
             raise ValueError("calibrate the system gate first")
+        if not math.isfinite(p0) or not 0.0 < p0 < 1.0:
+            raise ValueError("p0 must be finite and strictly between 0 and 1")
+        if not isinstance(n_samples, int) or n_samples <= 0:
+            raise ValueError("n_samples must be a positive integer")
+        if not math.isfinite(cost) or cost < 0:
+            raise ValueError("cost must be finite and >= 0")
+        if not math.isfinite(alpha):
+            raise ValueError("alpha must be finite")
         self.system = system
         self.p0 = p0
         self.n_samples = n_samples
@@ -165,12 +173,19 @@ class CrystallizeInjection:
         f_hz: its frequency, for human.modulate.
         truth: optional 1/0 for scoring only, never for deciding.
         """
+        if truth is not None and truth not in (0, 1):
+            raise ValueError("truth must be 0, 1, or None")
         system = self.system
         modulated = modulate(field, f_hz)
         decision, response, probs = system.decide(modulated)
         if decision == "accept":
-            return InjectionResult("accept", response, probs, 0,
-                                   self.p0, self.p0, None, None)
+            result = InjectionResult("accept", response, probs, 0,
+                                     self.p0, self.p0, None, None)
+            if truth is not None:
+                result.brier = brier(self.p0, truth)
+                result.points = points(self.p0, truth)
+                result.net = net_score(self.p0, truth, 0, self.cost)
+            return result
         rng = rng if rng is not None else random.Random(0)
         overlaps = []
         best_overlap, best_winner = -1.0, None

@@ -1,1 +1,28 @@
-{"creators":[{"affiliation":"Spark AI NLP, Fredericton, New Brunswick, Canada","name":"Brisson, Jean-François","orcid":"0009-0000-9778-5374"}],"description":"Nervous system in a bubble universe projecting into a toy world: bubble decision -> world action, fail-closed on reject, fidelity counting rejects in the denominator. Synthetic toy only. Inspiration: Mun Seok Lee, Digital to Wave paradigm (Zenodo 21947036, 21947108), cited as inspiration only, not package coauthorship.","license":{"id":"AGPL-3.0-only"},"title":"World Projection","upload_type":"software"}
+{
+  "creators": [
+    {
+      "affiliation": "Spark AI NLP, Fredericton, New Brunswick, Canada",
+      "name": "Brisson, Jean-François",
+      "orcid": "0009-0000-9778-5374"
+    }
+  ],
+  "description": "A standard-library synthetic toy mapping four code-generated patterns through a threshold gate into a 3x3 lattice action system. Not evidence about physics, neuroscience, people, or real-world safety. See PROVENANCE.md for source lineage and license notes.",
+  "license": {
+    "id": "AGPL-3.0-only"
+  },
+  "related_identifiers": [
+    {
+      "identifier": "https://zenodo.org/records/21947036",
+      "relation": "references",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://zenodo.org/records/21947108",
+      "relation": "references",
+      "scheme": "url"
+    }
+  ],
+  "title": "World Projection 3x3",
+  "upload_type": "software",
+  "version": "0.2.0"
+}

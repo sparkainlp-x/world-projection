@@ -1,63 +1,56 @@
-"""Demo for world-projection v0.1.0.
-Run: python demo.py
-Projection = bubble nervous decision -> world action, fail-closed
-on reject. All numbers below are inside this toy only.
+"""Small deterministic demonstration for world-projection-3x3 v0.2.0.
+Run: python3 demo.py
 """
 import random
 
 from bubble import Bubble
-from nervous import noisy, rand_field
-from observer_world import WorldObserver
-from projection import Projector, accuracy_on_accepted, fidelity
-from world import World
-
-
-def run(bubble, sigma, f_hz, n=40, seed=99):
-    sys = bubble.system
-    rng = random.Random(seed)
-    probes = [noisy(sys.patterns[k % 4], sigma, rng) for k in range(n)]
-    truths = [sys.RESPONSE_NAMES[k % 4] for k in range(n)]
-    proj = Projector(bubble, World())
-    recs = proj.project_many(probes, truths, f_hz=f_hz)
-    # Random fields must leave the world unchanged, probe by probe.
-    rng2 = random.Random(seed + 7)
-    rand_unchanged = 0
-    for _ in range(n):
-        before = proj.world.state()
-        rec = proj.project(rand_field(128, rng2), f_hz=f_hz, intended=None)
-        if not rec.changed:
-            rand_unchanged += 1
-    return recs, rand_unchanged, n
+from nervous import noisy
+from projection3x3 import Projector3x3, fidelity
+from world3x3 import World3x3
 
 
 def main():
-    print("world-projection v0.1.0 — nervous system -> bubble universe -> world")
-    b = Bubble(seed=42)
-    print(f"bubble: frozen tau = {b.true_tau:.3f}, J = {b.true_j:.3f}, 128 neurons, 4 responses")
-    for sigma, f_hz, label in [
-            (0.15, 7.0, "clean-ish, on-frequency"),
-            (0.30, 7.0, "noisy, on-frequency"),
-            (0.15, 0.25, "clean, off-frequency"),
-            (0.50, 7.0, "very noisy, on-frequency")]:
-        recs, rand_unchanged, rand_n = run(Bubble(seed=42), sigma, f_hz)
-        s = WorldObserver.summarise(recs)
-        print(f"{label} (sigma={sigma}, f={f_hz} Hz): fidelity = {s['fidelity']:.3f}, "
-              f"accuracy-on-accepted = {s['accuracy_on_accepted']}, "
-              f"accepted {s['accepted']}/{s['n']}, rejected-unchanged {s['rejected_unchanged']}/{s['rejected_total']}, "
-              f"random-unchanged {rand_unchanged}/{rand_n}")
-    # One trace per response, each from a fresh world, so the
-    # projection is visible, not just a rate. A shared world would
-    # make the second trace fail: withdraw moves x to -10, then the
-    # object at (2,0) is 12 away, outside the grasp range of 5.
-    for idx, intended in [(0, "withdraw"), (1, "grasp"), (2, "balance"), (3, "cool-alert")]:
-        proj = Projector(Bubble(seed=42), World())
-        sys = proj.bubble.system
-        rec = proj.project(sys.patterns[idx], f_hz=7.0, intended=intended)
-        print(f"trace clean {intended} -> {rec.response}, before={rec.before}, after={rec.after}")
-    print("claim, stated exactly: projection is implemented and measurable "
-          "inside this toy, with the fidelities above. It is NOT a proof "
-          "that physical holographic projection is real, NOT optical "
-          "holography, NOT neuroscience, NOT a medical device.")
+    print("world-projection-3x3 v0.2.0 — synthetic pattern -> 3x3 action")
+    print("This is a toy simulator, not a biological or physical model.")
+    for sigma, f_hz, label in [(0.15, 7.0, "clean, on-frequency"),
+                               (0.30, 7.0, "noisy, on-frequency"),
+                               (0.15, 0.25, "clean, off-frequency")]:
+        proj = Projector3x3(Bubble(seed=42), World3x3(seed=42))
+        system = proj.bubble.system
+        rng = random.Random(99)
+        probes = [noisy(system.patterns[k % 4], sigma, rng) for k in range(40)]
+        truths = [system.RESPONSE_NAMES[k % 4] for k in range(40)]
+        records = proj.project_many(probes, truths, f_hz=f_hz)
+        accepted = [record for record in records if record.decision == "accept"]
+        response_correct = sum(1 for record in accepted
+                               if record.response == record.intended)
+        state = proj.world.state()
+        print(
+            f"{label}: end_to_end_success={fidelity(records):.3f} "
+            f"({sum(record.correct for record in records)}/40), "
+            f"bubble_accepts={len(accepted)}/40, "
+            f"response_accuracy_on_accepted="
+            f"{response_correct / len(accepted) if accepted else 'n/a'}, "
+            f"world_guard_rejects={sum(r.refusal == 'world_guard' for r in records)}, "
+            f"breaker_refusals={sum(r.refusal == 'breaker' for r in records)}, "
+            f"grasp_no_ops={sum(r.refusal == 'no_op' for r in records)}, "
+            f"world_changes={state['accepted']}, agent={state['agent']}, "
+            f"held={state['held']}, max_residual={state['max_residual']:.3f}"
+        )
+    # Breaker trace: balance repeatedly until the guard trips.
+    proj = Projector3x3(Bubble(seed=42), World3x3(seed=42))
+    system = proj.bubble.system
+    for i in range(8):
+        record = proj.project(system.patterns[2], f_hz=7.0,
+                              intended="balance")
+        state = proj.world.state()
+        print(f"balance #{i + 1}: changed={record.changed}, "
+              f"refusal={record.refusal}, "
+              f"max_residual={state['max_residual']:.3f}, "
+              f"consecutive_rejects={state['consecutive_rejects']}, "
+              f"breaker={state['breaker_open']}")
+    print("All outcomes are generated by code-defined toy rules; they are not")
+    print("evidence about physics, neuroscience, or real-world safety.")
 
 
 if __name__ == "__main__":

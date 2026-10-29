@@ -30,9 +30,9 @@ The toy nervous system
   central  24: ids 72-95
   motor    32: flexor 16 (96-111), extensor 16 (112-127)
 Stages are position zones, not anatomy: sensory west, spinal
-centre, motor east, central as a cap on top. Edges are 4-NN plus
-explicit nearest cross-stage edges: sensory->spinal, spinal->
-motor (the reflex arc), spinal->central, central->motor.
+centre, motor east, central as a cap on top. Stored 4-NN and
+explicit cross-stage links are undirected; route metrics impose
+an ordered toy-stage sequence, not biological direction.
 Four stored "responses" are enveloped waves seeded at one
 sensory modality each: pain -> withdraw, touch -> grasp,
 proprioception -> balance, temperature -> cool-alert.
@@ -64,6 +64,15 @@ __version__ = "0.2.0"
 
 # ---------------------------------------------------------------- helpers
 def normalize(v):
+    if not v:
+        raise ValueError("cannot normalize an empty vector")
+    for c in v:
+        try:
+            finite = math.isfinite(float(c.real)) and math.isfinite(float(c.imag))
+        except (AttributeError, TypeError, ValueError):
+            finite = math.isfinite(float(c))
+        if not finite:
+            raise ValueError("vector entries must be finite")
     n = math.sqrt(sum(abs(c) ** 2 for c in v))
     if n == 0:
         raise ValueError("cannot normalize a zero vector")
@@ -71,10 +80,14 @@ def normalize(v):
 
 
 def overlap(field, pattern):
+    if len(field) != len(pattern):
+        raise ValueError("field and pattern must have equal lengths")
     return sum(p.conjugate() * f for p, f in zip(pattern, field))
 
 
 def noisy(field, sigma, rng):
+    if not math.isfinite(sigma) or sigma < 0:
+        raise ValueError("sigma must be finite and >= 0")
     return normalize(
         [c + complex(rng.gauss(0, sigma), rng.gauss(0, sigma))
          for c in field]
@@ -82,6 +95,8 @@ def noisy(field, sigma, rng):
 
 
 def rand_field(n, rng):
+    if not isinstance(n, int) or n <= 0:
+        raise ValueError("n must be a positive integer")
     return normalize(
         [complex(rng.gauss(0, 1), rng.gauss(0, 1)) for _ in range(n)]
     )
@@ -178,6 +193,13 @@ class NervousGeometry:
         link("spinal", "motor", 2, "reflex")
         link("spinal", "central", 2, "central")
         link("central", "motor", 2, "central")
+        by_id = {neuron.id: neuron for neuron in self.neurons}
+        # Include any spinal/motor k-NN links in the lesion set too.
+        reflex.update(
+            edge for edge in edges
+            if {by_id[edge[0]].stage, by_id[edge[1]].stage}
+            == {"spinal", "motor"}
+        )
         return sorted(edges), sorted(reflex), sorted(cross)
 
     def neighbours(self, nid, edges=None):
@@ -213,6 +235,48 @@ class NervousGeometry:
                 w = math.hypot(a.x - b.x, a.y - b.y)
                 if t + w < times[mid]:
                     times[mid] = t + w
+                    heapq.heappush(heap, (times[mid], mid))
+        return [times[neu.id] for neu in self.neurons]
+
+    def route_delays_from(self, source, stage_order, forbidden_edges=()):
+        """Shortest distances along a monotone sequence of toy stages.
+
+        Within-stage edges are allowed; cross-stage edges may advance only
+        to the next stage in `stage_order`. The stored geometry remains
+        undirected, but the route metric cannot travel backwards or skip a
+        stage.
+        """
+        if len(stage_order) < 2 or len(set(stage_order)) != len(stage_order):
+            raise ValueError("stage_order must contain at least two unique stages")
+        by_id = {neu.id: neu for neu in self.neurons}
+        if source not in by_id:
+            raise ValueError(f"unknown source neuron: {source}")
+        stage_index = {stage: i for i, stage in enumerate(stage_order)}
+        if by_id[source].stage not in stage_index:
+            raise ValueError("source stage is not present in stage_order")
+        forbidden = {(min(a, b), max(a, b)) for a, b in forbidden_edges}
+        times = {neu.id: math.inf for neu in self.neurons}
+        times[source] = 0.0
+        heap = [(0.0, source)]
+        while heap:
+            t, nid = heapq.heappop(heap)
+            if t > times[nid]:
+                continue
+            a = by_id[nid]
+            a_stage = stage_index.get(a.stage)
+            for mid in self.neighbours(nid):
+                b = by_id[mid]
+                b_stage = stage_index.get(b.stage)
+                if a_stage is None or b_stage is None:
+                    continue
+                if b_stage not in (a_stage, a_stage + 1):
+                    continue
+                edge = (min(nid, mid), max(nid, mid))
+                if edge in forbidden:
+                    continue
+                distance = math.hypot(a.x - b.x, a.y - b.y)
+                if t + distance < times[mid]:
+                    times[mid] = t + distance
                     heapq.heappush(heap, (times[mid], mid))
         return [times[neu.id] for neu in self.neurons]
 
@@ -278,8 +342,14 @@ class MembraneNervous:
 
     def calibrate(self, in_probes, ood_probes, grid=101):
         """Freeze tau: midpoint of the taus maximising Youden's J."""
+        if not isinstance(grid, int) or grid < 1:
+            raise ValueError("grid must be a positive integer")
+        if not in_probes or not ood_probes:
+            raise ValueError("in_probes and ood_probes must both be non-empty")
         in_max = [self.max_overlap(f) for f in in_probes]
         ood_max = [self.max_overlap(f) for f in ood_probes]
+        if not all(math.isfinite(v) for v in in_max + ood_max):
+            raise ValueError("probe overlaps must be finite")
         best_j, best_taus = -2.0, []
         for step in range(grid + 1):
             tau = step / grid
@@ -303,36 +373,26 @@ class MembraneNervous:
         return "accept", self.RESPONSE_NAMES[winner], probs
 
     def reflex_time(self, source):
-        """Median delay source -> motor, central nodes excluded."""
-        delays = self.geometry.delays_from(
-            source, exclude_stages=("central",))
+        """Median ordered sensory -> spinal -> motor route distance."""
+        delays = self.geometry.route_delays_from(
+            source, ("sensory", "spinal", "motor"))
         motor = self.geometry.stage_ids("motor")
         vals = [delays[i] for i in motor if math.isfinite(delays[i])]
         return median(vals)
 
     def central_time(self, source):
-        """Median over motor nodes of min_c delay(source->c)
-        + delay(c->motor), c in central. Route must pass central."""
-        full = self.geometry.delays_from(source)
-        central = self.geometry.stage_ids("central")
+        """Median ordered sensory -> spinal -> central -> motor distance."""
+        delays = self.geometry.route_delays_from(
+            source, ("sensory", "spinal", "central", "motor"))
         motor = self.geometry.stage_ids("motor")
-        vals = []
-        for m in motor:
-            # Delay from each central node to m, via full graph.
-            best = math.inf
-            for c in central:
-                d_cm = self.geometry.delays_from(c)[m]
-                if math.isfinite(full[c]) and math.isfinite(d_cm):
-                    best = min(best, full[c] + d_cm)
-            if math.isfinite(best):
-                vals.append(best)
+        vals = [delays[i] for i in motor if math.isfinite(delays[i])]
         return median(vals)
 
     def lesion_reflex_time(self, source):
         """Reflex route with spinal->motor reflex edges removed
         and central excluded: motor should become unreachable."""
-        delays = self.geometry.delays_from(
-            source, exclude_stages=("central",),
+        delays = self.geometry.route_delays_from(
+            source, ("sensory", "spinal", "motor"),
             forbidden_edges=self.geometry.reflex_edges)
         motor = self.geometry.stage_ids("motor")
         vals = [delays[i] for i in motor if math.isfinite(delays[i])]

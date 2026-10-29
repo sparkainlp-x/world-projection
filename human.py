@@ -66,7 +66,7 @@ def sensitivity(f_hz):
     1.0 exactly at SENSITIVE_HZ, falling as a Gaussian away
     from it. This is a design choice, not a measured curve.
     """
-    if f_hz < 0:
+    if not math.isfinite(f_hz) or f_hz < 0:
         raise ValueError("frequency must be >= 0")
     z = (f_hz - SENSITIVE_HZ) / SENSITIVITY_WIDTH_HZ
     return math.exp(-0.5 * z * z)

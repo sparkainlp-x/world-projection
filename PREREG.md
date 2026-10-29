@@ -1,30 +1,27 @@
-# Preregistration — world-projection v0.1.0
+# Analysis protocol — v0.2.0 review candidate
 
-Before any demo run, the rules are fixed:
+## Status and timing
 
-- Inside: bubble-nervous-system v0.1.0, vendored unchanged
-  (nervous, human, injection, bubble, observer, calibrator).
-  Gate calibrated once, tau frozen, patterns never added.
-- World: start (0,0), held None, object "stone" at (2,0),
-  stability 0.50, temperature 20.0, energy 100.0, step 0.
-- Projection, the only definition used here: bubble decision
-  (accept + response, or reject) at a given frequency, then on
-  accept the world applies exactly that response once, on reject
-  the world is unchanged. Actions: withdraw x -= 10, stability
-  -= 0.05; grasp picks iff object within 5 and held is None;
-  balance stability += 0.20 (cap 1.0); cool-alert temperature
-  -= 5.0. Each changed action costs 1.0 energy, step += 1.
-- Fidelity = correct / all, where correct = accepted AND
-  response == intended. Rejects count in the denominator.
-  Accuracy-on-accepted is reported separately, never as fidelity.
-- Demo grid: sigmas 0.15, 0.30, 0.50 at 7.0 Hz, plus 0.15 at
-  0.25 Hz, n=40 per cell, seed 99, plus 40 random fields per cell
-  which must leave the world unchanged probe by probe.
-- Claim bar, fixed before running: clean on-frequency fidelity
-  >= 0.80, noisy fidelity < clean fidelity, off-frequency
-  projection rejects, random fields leave the world unchanged
-  in at least 35/40 cases per cell. If any bar fails, the result
-  is reported as a failure, not tuned away.
-- Headline: WITHHELD for any physical claim. What is proved here
-  is implementation + measurement inside this toy, not that
-  physical holographic projection is real.
+The supplied archive was run during this review before this protocol was revised. Therefore this document is **not** a prospective preregistration for the archive’s earlier results and must not be presented as one. It records the locked protocol for fresh runs of this local review candidate. The candidate has not been published or tagged.
+
+## Toy definitions
+
+Four stored responses are ordered as withdraw, grasp, balance, and cool-alert. Acceptance is `max |overlap| ≥ tau`; the winner has the largest absolute overlap. Frequency sensitivity is fixed by design as a Gaussian centred at 7 Hz with width 1.5 Hz; no human data are used. World actions and the residual guard are code-defined simulator rules: a guard rejection rolls back, and a grasp with no stone is a no-op.
+
+The primary trajectory metric is end-to-end success: changed and correctly labelled actions divided by all probes. Rejections, breaker refusals, guard refusals, and no-ops remain in the denominator. Classifier response accuracy among accepted probes is reported separately. Route summaries use ordered stage-constrained graph distances in coordinate units, not milliseconds or physiological measurements.
+
+## Split and selection rules
+
+The internal gate is calibrated on 100 noisy in-pattern probes and 100 random fields with fixed RNG seed 11. Youden’s J selects `tau`, which is then frozen for the true simulator.
+
+Assumed-model calibration uses observer-generated gate, frequency, and injection reports on separate deterministic streams. Tau stability uses a 500-replicate percentile bootstrap; frequency is selected by Youden’s J against random-field controls. Injection is recommendation-only and does not affect the world-action path. A separate assumed-model assessment uses seed 404 with 200 balanced in-pattern probes and 200 random fields. Pre/post calibration are compared on the same held-out samples only after parameters are locked; those samples are not used for tuning.
+
+The optimizer uses probe seeds 201/202/203 and world-initialization seeds 42/43/44 for train/calibration/test, with 100 balanced in-pattern probes and 100 random fields per split. The search grid is tau 0.00–1.00 by 0.01 and frequencies 0.25, 1.2, 7, and 10 Hz. Train selects the highest end-to-end trajectory score among candidates with point false-accept rate ≤0.05 and in-pattern accept rate ≥0.50. The selected candidate is not retuned on calibration: it must pass a Wilson upper bound for false acceptance ≤0.05 and lower bound for in-pattern acceptance ≥0.50. If it fails, the run refuses and test is not evaluated; otherwise the locked candidate is evaluated once on test.
+
+The frozen-threshold comparator uses the simulator’s known tau. It is an oracle/reference, not a practical baseline. The held-out difference is descriptive; one trajectory per split does not establish a general performance gain.
+
+The sweep uses seeds 42, 7, and 123, with 40 probes per condition. Probe draws are paired across frequency cells within a seed/sigma. The output reports per-seed trajectory metrics, mean, and range; no confidence interval is claimed for stateful trajectory success.
+
+## Interpretation boundary
+
+Every probe, label, report, and world state is generated by this toy code. “Held out” means held out from selection inside the simulator, not external validation. The review runner’s automatic `review_signoff` toggle is only a test-harness flag. No result supports a claim about physics, neuroscience, a person, or real-world safety.
